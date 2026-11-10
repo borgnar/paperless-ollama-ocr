@@ -1,0 +1,5 @@
+# The init hook runs inside a Linux container; CRLF line endings abort it with
+# "$'\r': command not found" and Paperless then starts silently without the
+# plugin. Keep shell scripts LF no matter which OS they are checked out on.
+*.sh text eol=lf
+*.py text eol=lf
