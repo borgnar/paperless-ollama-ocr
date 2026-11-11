@@ -2,6 +2,18 @@
 
 Written by an AI agent; see the warning at the top of the README.
 
+## 0.1.4
+
+- **HTML tables in model output are flattened.** DeepSeek-OCR (and sometimes other
+  vision models) answer form-like pages with `<table>`/`<th>`/`<td>` markup instead
+  of text. Stored verbatim, that markup is what any downstream consumer — search,
+  tags, classification — then reads. Tables are now converted to one `cell | cell`
+  line per row, inline tags stripped, entities decoded. Truncated markup (a model
+  that stops after `<table><th colspan="1" rowspan="2">`) yields empty text rather
+  than tag soup, and pages that were entirely markup fall through to the per-page
+  failure path. Plain text containing `<` or `>` is untouched.
+- Test count: 90.
+
 ## 0.1.3
 
 - **`deepseek-ocr` becomes the default model.** Measured against real Ollama

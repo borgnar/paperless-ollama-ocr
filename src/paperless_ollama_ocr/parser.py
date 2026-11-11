@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("paperless.parsing.ollama")
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 #: Confidence threshold for ocrmypdf's page rotation during preprocessing.
 #: The ocrmypdf default of 12 is conservative and leaves many sideways

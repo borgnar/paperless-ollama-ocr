@@ -168,6 +168,47 @@ class TestParseGrounding:
         assert parse_ocr_response(raw, W, H).text == "figure"
 
 
+class TestHtmlCleanup:
+    """DeepSeek-OCR emits HTML tables for some form layouts."""
+
+    def test_table_becomes_one_row_per_line(self):
+        raw = (
+            "<table><tr><th>Certificate Number</th><td>2026-04417</td></tr>"
+            "<tr><th>Date of Marriage</th><td>14 June 2026</td></tr></table>"
+        )
+        page = parse_ocr_response(raw)
+        assert (
+            page.text
+            == "Certificate Number | 2026-04417\nDate of Marriage | 14 June 2026"
+        )
+
+    def test_truncated_table_leaves_no_markup(self):
+        # Exactly what showed up in the wild: a model that stopped after the
+        # first header cell.
+        page = parse_ocr_response('<table><th colspan="1" rowspan="2">')
+        assert "<" not in page.text
+        assert page.text == ""
+
+    def test_inline_tags_are_stripped(self):
+        page = parse_ocr_response("Amount: <b>960,33 EUR</b><br>paid")
+        assert page.text == "Amount: 960,33 EUR\npaid"
+
+    def test_entities_are_decoded(self):
+        page = parse_ocr_response("<td>M&#252;ller &amp; S&#246;hne</td>")
+        assert page.text == "Müller & Söhne"
+
+    def test_plain_text_with_angle_brackets_is_untouched(self):
+        page = parse_ocr_response("if a < b and c > d then stop")
+        assert page.text == "if a < b and c > d then stop"
+
+    def test_table_without_rows_keeps_the_cell_text(self):
+        page = parse_ocr_response(
+            '<table><th colspan="1">Certificate Number</th><td>2026-04417</td></table>'
+        )
+        assert "2026-04417" in page.text
+        assert "<" not in page.text
+
+
 class TestRequestImage:
     def test_small_page_is_not_resized(self):
         Image = pytest.importorskip("PIL.Image")

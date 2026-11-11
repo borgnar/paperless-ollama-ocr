@@ -7,6 +7,7 @@ close to the original so upstream fixes stay easy to merge.
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -125,11 +126,77 @@ _BOX_DICTS = (
 )
 
 
+#: DeepSeek-OCR emits HTML tables for some form layouts, and other vision models
+#: sometimes do the same. Raw markup in the stored text is worse than useless:
+#: full-text search sees tag soup, and anything downstream that classifies or
+#: summarises the document has to read `<table><th colspan="1" rowspan="2">`
+#: instead of the certificate. Tables are flattened to one row per line.
+_HTML_TABLE = re.compile(r"<table\b.*?</table\s*>", re.DOTALL | re.IGNORECASE)
+_HTML_ROW = re.compile(
+    r"<tr\b[^>]*>(.*?)(?=<tr\b|</table\s*>|$)", re.DOTALL | re.IGNORECASE
+)
+_HTML_CELL = re.compile(
+    r"<t[dh]\b[^>]*>(.*?)(?=<t[dh]\b|</tr\s*>|$)", re.DOTALL | re.IGNORECASE
+)
+_HTML_TAG = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
+#: Only these tag names trigger the cleanup; a stray ``a < b`` in text is left alone.
+_HTML_LIKE = re.compile(
+    r"</?(?:table|tr|td|th|thead|tbody|tfoot|p|div|span|br|hr|b|i|u|s|strong|em|"
+    r"ul|ol|li|h[1-6]|font|img|thead)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HTML_BLOCK_BREAK = re.compile(
+    r"<br\s*/?>|</p\s*>|</div\s*>|</li\s*>|</h[1-6]\s*>", re.IGNORECASE
+)
+
+
+def _strip_html_fragment(fragment: str) -> str:
+    """Text of one HTML fragment: tags dropped, entities decoded, lines trimmed."""
+    text = _HTML_BLOCK_BREAK.sub("\n", fragment)
+    text = _HTML_TAG.sub(" ", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return "\n".join(line.strip() for line in text.splitlines()).strip()
+
+
+def html_tables_to_text(text: str) -> str:
+    """Flatten HTML tables to `cell | cell` lines and drop leftover tags.
+
+    Handles truncated markup too (a model that stops mid-table), which would
+    otherwise leave an unterminated ``<table>`` in the stored text, and tables
+    without ``<tr>`` wrappers, where the cells themselves carry the content.
+    """
+
+    def flatten(match: re.Match[str]) -> str:
+        rows: list[str] = []
+        for row in _HTML_ROW.findall(match.group(0)):
+            cells = [_strip_html_fragment(cell) for cell in _HTML_CELL.findall(row)]
+            cells = [cell for cell in cells if cell]
+            if cells:
+                rows.append(" | ".join(cells))
+        if not rows:
+            # No <tr> at all: keep the cell contents rather than dropping them.
+            loose = [
+                _strip_html_fragment(cell)
+                for cell in _HTML_CELL.findall(match.group(0))
+            ]
+            rows = [cell for cell in loose if cell]
+        return "\n".join(rows)
+
+    converted = _HTML_TABLE.sub(flatten, text)
+    # Whatever is left of the table (no closing tag, stray <th>) is tag soup.
+    if "<" in converted and _HTML_TAG.search(converted):
+        converted = _strip_html_fragment(converted)
+    return converted
+
+
 def _clean_text(text: str) -> str:
     """Strip model chatter, tokens and markdown noise from a transcription."""
     cleaned = _SPECIAL_TOKENS.sub("", text or "")
     cleaned = _IMAGE_PLACEHOLDER.sub("", cleaned)
     cleaned = _FENCE_LINE.sub("", cleaned)
+    if _HTML_LIKE.search(cleaned):
+        cleaned = html_tables_to_text(cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()

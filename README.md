@@ -115,7 +115,7 @@ The log must show:
 [ollama-ocr] Installation successful.
 [ollama-ocr] OK - parser loads.
 [ollama-ocr] endpoint http://192.168.1.50:11434 reachable, 3 model(s).
-Loaded third-party parser 'Ollama OCR Parser' v0.1.3
+Loaded third-party parser 'Ollama OCR Parser' v0.1.4
 ```
 
 > **Line endings matter.** The shell scripts need Unix line endings (LF). If
@@ -267,6 +267,13 @@ Two practical notes: the context window is 8k, which
 `PAPERLESS_OLLAMA_OCR_NUM_CTX` matches by default, and a short prompt such as
 "Parse the text in the image." returned an empty answer, so keep the explicit
 transcribe instruction rather than shortening it.
+
+Some form-shaped pages come back as HTML tables (`<table><th colspan="1">…`)
+rather than lines of text. Those are flattened to one `cell | cell` line per row
+and any leftover markup is stripped, so neither the search index nor anything
+downstream that classifies the document ever sees tag soup. A page that consists
+only of markup yields empty text and goes through the normal per-page failure
+path.
 
 ## Health check
 
@@ -432,7 +439,7 @@ installed, and runs a fake Ollama HTTP server, so the suite runs outside a
 container:
 
 ```bash
-pytest -q      # 84 tests, no model or GPU needed
+pytest -q      # 90 tests, no model or GPU needed
 ```
 
 ## License
