@@ -54,6 +54,16 @@ def page_tiff(tmp_path):
     return path
 
 
+@pytest.fixture
+def big_page_png(tmp_path):
+    """Large enough that the request image is actually downscaled."""
+    image = Image.new("RGB", (3000, 2000), "white")
+    ImageDraw.Draw(image).rectangle((100, 100, 2800, 400), fill="black")
+    path = tmp_path / "big.png"
+    image.save(path)
+    return path
+
+
 def configure(monkeypatch, fake_ollama, **env):
     monkeypatch.setenv("PAPERLESS_OLLAMA_OCR_ENDPOINT", fake_ollama.endpoint)
     monkeypatch.setenv("PAPERLESS_OLLAMA_OCR_MODEL", "qwen2.5vl:3b")
@@ -183,6 +193,46 @@ class TestParse:
         parser = OllamaOcrParser()
         parser.parse(page_tiff, "image/tiff")
         assert parser.get_text() == "page one"
+
+    def test_empty_answer_is_retried_at_a_smaller_size(
+        self, monkeypatch, fake_ollama, big_page_png
+    ):
+        # deepseek-ocr answers nothing when the image is too large; the retry is
+        # the difference between a transcribed page and a Tesseract fallback.
+        fake_ollama.replies = ["", TEXT]
+        configure(monkeypatch, fake_ollama)
+        parser = OllamaOcrParser()
+        parser.parse(big_page_png, "image/png")
+
+        assert len(fake_ollama.requests) == 2
+        assert parser.get_text() == TEXT
+
+        import base64
+        import io
+
+        sizes = []
+        for request in fake_ollama.requests:
+            raw = base64.b64decode(request["messages"][0]["images"][0])
+            with Image.open(io.BytesIO(raw)) as opened:
+                sizes.append(opened.size)
+        assert max(sizes[0]) == 2400
+        assert max(sizes[1]) == 1600
+
+    def test_two_empty_answers_fall_back_to_tesseract(
+        self, monkeypatch, fake_ollama, big_page_png
+    ):
+        fake_ollama.replies = ["", ""]
+
+        from paperless.parsers.tesseract import RasterisedDocumentParser
+
+        RasterisedDocumentParser.calls.clear()
+        configure(monkeypatch, fake_ollama)
+        parser = OllamaOcrParser()
+        parser.parse(big_page_png, "image/png")
+
+        assert len(fake_ollama.requests) == 2
+        assert parser.get_text() == "tesseract fallback text"
+        assert len(RasterisedDocumentParser.calls) == 1
 
     def test_born_digital_pdf_without_archive_is_not_sent(
         self, monkeypatch, fake_ollama, page_png

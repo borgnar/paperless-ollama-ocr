@@ -2,6 +2,17 @@
 
 Written by an AI agent; see the warning at the top of the README.
 
+## 0.1.5
+
+- **An empty answer is retried at 1600 px.** Measured on a 300 dpi A4 page:
+  `deepseek-ocr` returns an empty response for the raw 2480x3508 image, while the
+  same page at 200 dpi transcribes normally. A single-page document then had
+  every page "fail", which silently handed it to the Tesseract fallback — the
+  exact source of "the scan looks fine but the text is garbage". The retry costs
+  one request and recovers the page; if the smaller request is also empty the
+  page fails as before.
+- Test count: 92.
+
 ## 0.1.4
 
 - **HTML tables in model output are flattened.** DeepSeek-OCR (and sometimes other

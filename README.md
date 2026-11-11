@@ -115,7 +115,7 @@ The log must show:
 [ollama-ocr] Installation successful.
 [ollama-ocr] OK - parser loads.
 [ollama-ocr] endpoint http://192.168.1.50:11434 reachable, 3 model(s).
-Loaded third-party parser 'Ollama OCR Parser' v0.1.4
+Loaded third-party parser 'Ollama OCR Parser' v0.1.5
 ```
 
 > **Line endings matter.** The shell scripts need Unix line endings (LF). If
@@ -439,7 +439,7 @@ installed, and runs a fake Ollama HTTP server, so the suite runs outside a
 container:
 
 ```bash
-pytest -q      # 90 tests, no model or GPU needed
+pytest -q      # 92 tests, no model or GPU needed
 ```
 
 ## License

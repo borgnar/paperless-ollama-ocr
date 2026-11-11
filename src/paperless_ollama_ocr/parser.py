@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("paperless.parsing.ollama")
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 #: Confidence threshold for ocrmypdf's page rotation during preprocessing.
 #: The ocrmypdf default of 12 is conservative and leaves many sideways
@@ -202,45 +202,56 @@ class OllamaOcrParser(RemoteDocumentParser):
 
         schema = LINE_SCHEMA if config.structured else None
         client = OllamaClient(config)
+        retry_side = min(config.max_side or 1600, 1600)
 
-        def transcribe(index: int) -> OcrPage | None:
+        def attempt(index: int, max_side: int) -> OcrPage | None:
+            """One request for one page, or None when it yields no text."""
             image = images[index]
-            started = time.monotonic()
-            data, (req_width, req_height) = prepare_request_image(
-                image,
-                config.max_side,
-            )
-            # The structured prompt tells the model the page size, so its
-            # boxes come back in pixels of the image we just sent.
-            page_prompt = config.prompt or build_prompt(
-                config.structured,
-                req_width,
-                req_height,
-            )
-            try:
-                raw = client.transcribe(
+            data, (req_width, req_height) = prepare_request_image(image, max_side)
+            payload_page = parse_ocr_response(
+                client.transcribe(
                     data,
-                    page_prompt,
+                    config.prompt
+                    or build_prompt(config.structured, req_width, req_height),
                     schema=schema,
-                )
-            except OllamaError as e:
-                logger.error("Page %d failed: %s", index + 1, e)
-                return None
-            page = parse_ocr_response(
-                raw,
+                ),
                 req_width,
                 req_height,
                 config.bbox_space,
             )
+            if not payload_page.text.strip():
+                return None
             # Boxes refer to the (possibly downscaled) request image; map them
             # back onto the full-resolution page used for the archive.
-            page = rescale_blocks(
-                page,
+            return rescale_blocks(
+                payload_page,
                 image.width / req_width,
                 image.height / req_height,
             )
-            if not page.text.strip():
-                logger.warning("Page %d came back empty.", index + 1)
+
+        def transcribe(index: int) -> OcrPage | None:
+            started = time.monotonic()
+            try:
+                page = attempt(index, config.max_side)
+            except OllamaError as e:
+                logger.error("Page %d failed: %s", index + 1, e)
+                return None
+            if page is None:
+                # An oversized request can leave a model with nothing to say
+                # (deepseek-ocr returns an empty answer above ~2400 px). One
+                # retry at a smaller size is cheaper than losing the page.
+                logger.info(
+                    "Page %d came back empty - retrying at %d px.",
+                    index + 1,
+                    retry_side,
+                )
+                try:
+                    page = attempt(index, retry_side)
+                except OllamaError as e:
+                    logger.error("Page %d retry failed: %s", index + 1, e)
+                    return None
+            if page is None:
+                logger.warning("Page %d came back empty twice.", index + 1)
                 return None
             logger.debug(
                 "Page %d: %d characters in %.1fs",
