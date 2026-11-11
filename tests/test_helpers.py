@@ -7,6 +7,7 @@ import pytest
 from paperless_ollama_ocr.helpers import OcrBlock
 from paperless_ollama_ocr.helpers import OcrPage
 from paperless_ollama_ocr.helpers import _coerce_bbox
+from paperless_ollama_ocr.helpers import is_degenerate_text
 from paperless_ollama_ocr.helpers import parse_ocr_response
 from paperless_ollama_ocr.helpers import prepare_request_image
 from paperless_ollama_ocr.helpers import rescale_blocks
@@ -207,6 +208,60 @@ class TestHtmlCleanup:
         )
         assert "2026-04417" in page.text
         assert "<" not in page.text
+
+
+class TestDegenerateText:
+    """Repetition loops must not be stored as if they were text."""
+
+    def test_repetition_loop_is_detected(self):
+        loop = "\n".join(["1. C"] * 400 + ["2. D"] * 200)
+        assert is_degenerate_text(loop) is True
+
+    def test_multi_line_cycle_is_detected(self):
+        # The real deepseek-ocr loop: 655 lines cycling through distinct labels,
+        # 50 % unique, so only the line-length signal catches it.
+        cycle = [f"{i}. {chr(65 + i % 20)}" for i in range(30)]
+        loop = "\n".join(cycle * 22)
+        assert is_degenerate_text(loop) is True
+
+    def test_bank_statement_is_not_flagged(self):
+        statement = "\n".join(
+            f"{i:02d}.11.2026  Lastschrift  {i},00 EUR  Saldo 1.{i:03d},00 EUR"
+            for i in range(120)
+        )
+        assert is_degenerate_text(statement) is False
+
+    def test_dense_price_table_is_not_flagged(self):
+        table = "\n".join(f"{i}\tPosition {i}\t{i * 12.5:.2f}" for i in range(100))
+        assert is_degenerate_text(table) is False
+
+    def test_real_form_text_is_not_flagged(self):
+        text = "\n".join(
+            [
+                "CERTIFICATE OF MARRIAGE",
+                "1A. CERTIFICATE NUMBER",
+                "2026-04417",
+                "1B. DATE OF MARRIAGE",
+                "14 June 2026",
+                "1C. FULL NAME OF PARTY A",
+                "Jordan A. Reyes",
+                "1D. FULL NAME OF PARTY B",
+                "Samuel T. Whitfield",
+                "2A. OFFICIANT",
+                "Rev. Marguerite Okafor",
+                "2B. OFFICIAL TITLE",
+                "Ordained Minister",
+            ]
+        )
+        assert is_degenerate_text(text) is False
+
+    def test_short_repetitive_text_is_not_flagged(self):
+        # A small form that legitimately repeats "N/A" is not a loop.
+        assert is_degenerate_text("\n".join(["N/A"] * 6)) is False
+
+    def test_repeated_but_varied_lines_are_not_flagged(self):
+        text = "\n".join(f"Row {index}: value {index}" for index in range(40))
+        assert is_degenerate_text(text) is False
 
 
 class TestRequestImage:

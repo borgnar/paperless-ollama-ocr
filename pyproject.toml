@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paperless-ollama-ocr"
-version = "0.1.5"
+version = "0.1.6"
 description = "Self-hosted Ollama vision models as an OCR engine for Paperless-ngx"
 readme = "README.md"
 requires-python = ">=3.11"

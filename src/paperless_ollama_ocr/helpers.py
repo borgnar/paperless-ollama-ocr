@@ -190,6 +190,54 @@ def html_tables_to_text(text: str) -> str:
     return converted
 
 
+def is_degenerate_text(
+    text: str,
+    min_lines: int = 12,
+    max_unique_ratio: float = 0.40,
+    many_lines: int = 80,
+    min_avg_line_chars: float = 15.0,
+) -> bool:
+    """True when a transcription is a repetition loop rather than text.
+
+    Vision models degenerate into repeating themselves until they hit the token
+    limit. Measured on a 300 dpi form page, `deepseek-ocr` returned ~13 000
+    characters that cleaned down to 655 lines cycling through "1. C", "2. D",
+    "3. F"… — real text does not repeat like that, but the lines are not
+    identical either, so counting duplicates alone misses it.
+
+    Two signals, both calibrated on real output from this plugin:
+
+    * identical-line ratio — catches single-line loops (`granite3.2-vision`:
+      355 lines, 3 % unique)
+    * very short average line — catches multi-line cycles (deepseek-ocr loop:
+      7.7 characters per line; every legitimate page measured 22–45)
+
+    A compression-ratio test was tried first and rejected: templated documents
+    (bank statements, delivery schedules) compress just as well as a loop.
+    """
+    from collections import Counter
+
+    data = (text or "").strip()
+    if not data:
+        return False
+
+    lines = [line.strip() for line in data.splitlines() if line.strip()]
+    if not lines:
+        return False
+
+    if len(lines) >= min_lines:
+        if len(set(lines)) / len(lines) < max_unique_ratio:
+            return True
+        counts = Counter(lines)
+        if (
+            counts.most_common(1)[0][1] / len(lines) > 0.5
+            and len(lines) >= 2 * min_lines
+        ):
+            return True
+
+    return len(lines) >= many_lines and len(data) / len(lines) < min_avg_line_chars
+
+
 def _clean_text(text: str) -> str:
     """Strip model chatter, tokens and markdown noise from a transcription."""
     cleaned = _SPECIAL_TOKENS.sub("", text or "")

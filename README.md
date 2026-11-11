@@ -115,7 +115,7 @@ The log must show:
 [ollama-ocr] Installation successful.
 [ollama-ocr] OK - parser loads.
 [ollama-ocr] endpoint http://192.168.1.50:11434 reachable, 3 model(s).
-Loaded third-party parser 'Ollama OCR Parser' v0.1.5
+Loaded third-party parser 'Ollama OCR Parser' v0.1.6
 ```
 
 > **Line endings matter.** The shell scripts need Unix line endings (LF). If
@@ -274,6 +274,27 @@ and any leftover markup is stripped, so neither the search index nor anything
 downstream that classifies the document ever sees tag soup. A page that consists
 only of markup yields empty text and goes through the normal per-page failure
 path.
+
+### deepseek-ocr is fragile on dense form pages
+
+Measured on a certificate-style form page (6.5 pt labels, a 90°-rotated stamp, a
+signature scribble), rendered at two resolutions:
+
+| Model | 200 dpi (1654×2339) | 300 dpi (2481×3507) |
+|---|---|---|
+| `deepseek-ocr` | 4/5 fields, clean text | **empty** at native size; **13 000-character repetition loop** when downscaled to 2400 or 1600 px |
+| `qwen2.5vl:3b` | 4/5 fields, clean text | 4/5 fields, clean text at every size |
+
+Both models truncate the rotated stamp to `ANY ALTERATION OR ERASURE` and neither
+reads handwriting — that part is not fixable here. But the failure *mode* matters:
+`deepseek-ocr` degrades into silence or a loop on this kind of page, which is why
+0.1.5 retries an empty answer at 1600 px and 0.1.6 rejects repetition loops
+rather than storing them.
+
+Practical consequence: keep `PAPERLESS_OLLAMA_OCR_DPI=200` (higher does not help
+any model here), and use `qwen2.5vl:3b` for form-heavy archives — certificates,
+licences, anything with boxes, stamps and small print. `deepseek-ocr` remains the
+better choice for plain prose pages, where it is also roughly three times faster.
 
 ## Health check
 
@@ -439,7 +460,7 @@ installed, and runs a fake Ollama HTTP server, so the suite runs outside a
 container:
 
 ```bash
-pytest -q      # 92 tests, no model or GPU needed
+pytest -q      # 101 tests, no model or GPU needed
 ```
 
 ## License

@@ -234,6 +234,33 @@ class TestParse:
         assert parser.get_text() == "tesseract fallback text"
         assert len(RasterisedDocumentParser.calls) == 1
 
+    def test_repetition_loop_is_retried_then_rejected(
+        self, monkeypatch, fake_ollama, big_page_png
+    ):
+        loop = "assistant\n" + "\n".join(["1. C"] * 300 + ["2. D"] * 100)
+        fake_ollama.replies = [loop, loop]
+
+        from paperless.parsers.tesseract import RasterisedDocumentParser
+
+        RasterisedDocumentParser.calls.clear()
+        configure(monkeypatch, fake_ollama)
+        parser = OllamaOcrParser()
+        parser.parse(big_page_png, "image/png")
+
+        assert len(fake_ollama.requests) == 2
+        # Junk is never stored; the page falls back like any other failure.
+        assert "1. C\n1. C" not in parser.get_text()
+        assert parser.get_text() == "tesseract fallback text"
+        assert len(RasterisedDocumentParser.calls) == 1
+
+    def test_loop_then_clean_text_is_kept(self, monkeypatch, fake_ollama, big_page_png):
+        loop = "\n".join(["1. C"] * 300 + ["2. D"] * 100)
+        fake_ollama.replies = [loop, TEXT]
+        configure(monkeypatch, fake_ollama)
+        parser = OllamaOcrParser()
+        parser.parse(big_page_png, "image/png")
+        assert parser.get_text() == TEXT
+
     def test_born_digital_pdf_without_archive_is_not_sent(
         self, monkeypatch, fake_ollama, page_png
     ):

@@ -2,6 +2,20 @@
 
 Written by an AI agent; see the warning at the top of the README.
 
+## 0.1.6
+
+- **Repetition loops are rejected instead of stored.** On a 300 dpi form page,
+  `deepseek-ocr` returned ~13 000 characters cycling through "1. C", "2. D",
+  "3. F"… — non-empty, so 0.1.5's retry would happily have kept it. Two signals
+  now catch it: an identical-line ratio (a 355-line `granite3.2-vision` loop was
+  3 % unique) and a very short average line (7.7 characters in the real loop;
+  every legitimate page measured 22–45). A rejected page goes through the normal
+  retry-then-fallback path.
+- A compression-ratio detector was tried first and **rejected**: bank statements
+  and price tables compress as well as a loop, and it flagged them. The
+  line-length signal does not.
+- Test count: 101.
+
 ## 0.1.5
 
 - **An empty answer is retried at 1600 px.** Measured on a 300 dpi A4 page:

@@ -33,6 +33,7 @@ from paperless_ollama_ocr.helpers import LINE_SCHEMA
 from paperless_ollama_ocr.helpers import OcrPage
 from paperless_ollama_ocr.helpers import build_ocr_page
 from paperless_ollama_ocr.helpers import build_prompt
+from paperless_ollama_ocr.helpers import is_degenerate_text
 from paperless_ollama_ocr.helpers import load_page_images
 from paperless_ollama_ocr.helpers import parse_ocr_response
 from paperless_ollama_ocr.helpers import prepare_request_image
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("paperless.parsing.ollama")
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 #: Confidence threshold for ocrmypdf's page rotation during preprocessing.
 #: The ocrmypdf default of 12 is conservative and leaves many sideways
@@ -220,6 +221,12 @@ class OllamaOcrParser(RemoteDocumentParser):
                 config.bbox_space,
             )
             if not payload_page.text.strip():
+                return None
+            if is_degenerate_text(payload_page.text):
+                logger.warning(
+                    "Page %d came back as a repetition loop - discarding it.",
+                    index + 1,
+                )
                 return None
             # Boxes refer to the (possibly downscaled) request image; map them
             # back onto the full-resolution page used for the archive.
