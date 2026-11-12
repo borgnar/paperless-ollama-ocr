@@ -173,6 +173,7 @@ pull` no longer gets you new versions.
 | `PAPERLESS_OLLAMA_OCR_PREPROCESS` | no | `true` | Run ocrmypdf first to deskew and rotate pages, so the archive PDF is upright. Roughly 8 s per document. |
 | `PAPERLESS_OLLAMA_OCR_FALLBACK` | no | `true` | Fall back to Tesseract when every page fails, instead of storing empty text. |
 | `PAPERLESS_OLLAMA_OCR_FORCE` | no | `false` | Transcribe even when Paperless requests no archive, i.e. PDFs that already carry a text layer. |
+| `PAPERLESS_OLLAMA_OCR_INVALIDATE_SIGNATURES` | no | `false` | Deskew digitally signed PDFs too. Only the temporary copy is rewritten; the stored original keeps its signature. |
 | `PAPERLESS_OLLAMA_OCR_DPI` | no | `200` | Rasterisation DPI. 200 is enough; 300 costs twice the runtime for little gain. |
 | `PAPERLESS_OLLAMA_OCR_MAX_SIDE` | no | `2400` | Longest side of the image sent to the model; larger pages are downscaled for the request only. `0` disables. |
 | `PAPERLESS_OLLAMA_OCR_TIMEOUT` | no | `600` | Seconds per page. |
