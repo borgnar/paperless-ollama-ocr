@@ -338,6 +338,44 @@ class TestPreprocess:
         parser = OllamaOcrParser()
         assert parser._preprocess(Path("/tmp/in.pdf"), "application/pdf") is None
 
+    def test_signed_pdf_is_skipped_quietly(self, monkeypatch, caplog):
+        ocrmypdf = pytest.importorskip("ocrmypdf")
+
+        class DigitalSignatureError(Exception):
+            pass
+
+        def boom(*args, **kwargs):
+            raise DigitalSignatureError("input PDF has a digital signature")
+
+        monkeypatch.setattr(ocrmypdf, "ocr", boom)
+        parser = OllamaOcrParser()
+        with caplog.at_level("INFO", logger="paperless.parsing.ollama"):
+            assert parser._preprocess(Path("/tmp/in.pdf"), "application/pdf") is None
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("digitally signed" in message for message in messages)
+        assert not any("Preprocessing failed" in message for message in messages)
+
+    def test_signature_invalidation_is_opt_in(self, monkeypatch):
+        ocrmypdf = pytest.importorskip("ocrmypdf")
+        seen = {}
+
+        def fake_ocr(source, target, **kwargs):
+            seen.update(kwargs)
+
+        monkeypatch.setattr(ocrmypdf, "ocr", fake_ocr)
+        parser = OllamaOcrParser()
+        parser._preprocess(Path("/tmp/in.pdf"), "application/pdf")
+        assert seen["invalidate_digital_signatures"] is False
+
+        from paperless_ollama_ocr.config import OllamaConfig
+
+        config = OllamaConfig(
+            **{**OllamaConfig.from_env().__dict__, "invalidate_signatures": True}
+        )
+        parser._preprocess(Path("/tmp/in.pdf"), "application/pdf", config)
+        assert seen["invalidate_digital_signatures"] is True
+
     def test_parse_still_transcribes_when_preprocessing_fails(
         self, monkeypatch, fake_ollama, page_pdf
     ):

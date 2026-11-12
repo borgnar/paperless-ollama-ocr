@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("paperless.parsing.ollama")
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 #: Confidence threshold for ocrmypdf's page rotation during preprocessing.
 #: The ocrmypdf default of 12 is conservative and leaves many sideways
@@ -143,7 +143,7 @@ class OllamaOcrParser(RemoteDocumentParser):
 
         source = document_path
         if config.preprocess:
-            source = self._preprocess(document_path, mime_type) or document_path
+            source = self._preprocess(document_path, mime_type, config) or document_path
 
         pages, images = self._ocr_document(source, mime_type, config)
 
@@ -306,7 +306,12 @@ class OllamaOcrParser(RemoteDocumentParser):
     # Preprocessing and fallback
     # ------------------------------------------------------------------
 
-    def _preprocess(self, source: Path, mime_type: str) -> Path | None:
+    def _preprocess(
+        self,
+        source: Path,
+        mime_type: str,
+        config: OllamaConfig | None = None,
+    ) -> Path | None:
         """Deskew and rotate the pages before they are transcribed.
 
         A vision model reads rotated pages correctly either way, but the
@@ -316,6 +321,11 @@ class OllamaOcrParser(RemoteDocumentParser):
         text layer: only the page images are corrected, the text comes from
         the model.
 
+        A digitally signed PDF is refused by ocrmypdf, which is correct: the
+        pass would invalidate the signature. The original stays untouched
+        either way (the archive is a fresh render), so this is an expected
+        skip and only logged at INFO.
+
         Returns the preprocessed file, or None to continue with the
         original when preprocessing is not applicable or fails.
         """
@@ -324,6 +334,7 @@ class OllamaOcrParser(RemoteDocumentParser):
 
         import ocrmypdf
 
+        invalidate = bool(config and config.invalidate_signatures)
         target = self._tempdir / "preprocessed.pdf"
         try:
             ocrmypdf.ocr(
@@ -335,8 +346,17 @@ class OllamaOcrParser(RemoteDocumentParser):
                 tesseract_timeout=0,
                 progress_bar=False,
                 output_type="pdf",
+                invalidate_digital_signatures=invalidate,
             )
         except Exception as e:
+            if type(e).__name__ == "DigitalSignatureError":
+                logger.info(
+                    "PDF is digitally signed - skipping the geometry pass and "
+                    "transcribing the original pages. Set "
+                    "PAPERLESS_OLLAMA_OCR_INVALIDATE_SIGNATURES=true to deskew "
+                    "these anyway (the stored original keeps its signature).",
+                )
+                return None
             logger.warning(
                 "Preprocessing failed (%s), continuing with the original file.",
                 type(e).__name__,

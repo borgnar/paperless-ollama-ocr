@@ -80,6 +80,9 @@ class OllamaConfig:
     #: Transcribe even when Paperless asks for no archive (PDFs that already
     #: contain text). Off by default, matching core behaviour.
     force: bool
+    #: Let the geometry pass rewrite digitally signed PDFs. The stored original
+    #: keeps its signature; this only affects the temporary working copy.
+    invalidate_signatures: bool
     #: DPI used to rasterise pages before they are sent to the model.
     dpi: int
     #: Longest side in pixels of the image sent to the model; larger pages are
@@ -124,6 +127,9 @@ class OllamaConfig:
             fallback=_bool_from_env("PAPERLESS_OLLAMA_OCR_FALLBACK", True),
             preprocess=_bool_from_env("PAPERLESS_OLLAMA_OCR_PREPROCESS", True),
             force=_bool_from_env("PAPERLESS_OLLAMA_OCR_FORCE", False),
+            invalidate_signatures=_bool_from_env(
+                "PAPERLESS_OLLAMA_OCR_INVALIDATE_SIGNATURES", False
+            ),
             dpi=_int_from_env("PAPERLESS_OLLAMA_OCR_DPI", 200),
             max_side=_int_from_env("PAPERLESS_OLLAMA_OCR_MAX_SIDE", 2400),
             timeout=_float_from_env("PAPERLESS_OLLAMA_OCR_TIMEOUT", DEFAULT_TIMEOUT),

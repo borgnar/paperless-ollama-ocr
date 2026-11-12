@@ -2,6 +2,19 @@
 
 Written by an AI agent; see the warning at the top of the README.
 
+## 0.1.7
+
+- **Digitally signed PDFs no longer log a warning.** ocrmypdf refuses to rewrite
+  a signed PDF (correctly — it would invalidate the signature), so every bank
+  statement and terms-and-conditions file printed
+  `Preprocessing failed (DigitalSignatureError)`. That is an expected skip, not a
+  fault: the geometry pass is now skipped with an INFO line naming the reason, and
+  the original pages are transcribed unchanged.
+- `PAPERLESS_OLLAMA_OCR_INVALIDATE_SIGNATURES` (default false) opts into deskewing
+  signed PDFs anyway. It only affects the temporary working copy — the stored
+  original keeps its signature.
+- Test count: 103.
+
 ## 0.1.6
 
 - **Repetition loops are rejected instead of stored.** On a 300 dpi form page,
